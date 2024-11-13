@@ -16,30 +16,44 @@ template<typename Sample>
 struct EllipticBlepCoeffs {
 	static constexpr size_t maxIntegrals = 3;
 	static constexpr size_t complexCount = 6;
-	std::array<std::complex<Sample>, complexCount> complexPoles{{
-		{Sample(-9.99999999999998), Sample(17.320508075688775)},
-		{Sample(-5726.939260714514), Sample(8080.5942176265635)},
-		{Sample(-3893.552155112021), Sample(14063.948602720604)},
-		{Sample(-2216.2312688714273), Sample(17616.634325150433)},
-		{Sample(-1068.0936298180827), Sample(19431.27307638297)},
-		{Sample(-311.84925586421656), Sample(20172.43872543252)}
-	}};
-	std::array<std::complex<Sample>, complexCount> complexCoeffs{{
-		{Sample(-20.13049810496102), Sample(-11.47115192765502)},
-		{Sample(-16664.47608749145), Sample(-7465.413173434912)},
-		{Sample(7433.255028690656), Sample(9451.07405144271)},
-		{Sample(-534.2195875020672), Sample(-6367.554653710909)},
-		{Sample(-1517.6972854656349), Sample(2215.42626824697)},
-		{Sample(688.7621296146389), Sample(-214.96380542910123)}
-	}};
 	static constexpr int realCount = 2;
-	std::array<Sample, realCount> realPoles{{
-		Sample(-20.00000000000003),
-		Sample(-6592.667785686009)
+	std::array<std::complex<Sample>, complexCount> complexPoles{{
+		{Sample(-9.999999999999968), Sample(17.320508075688757)},
+		{Sample(-5562.019693104996), Sample(7721.557745942449)},
+		{Sample(-3936.754373279431), Sample(13650.191094084097)},
+		{Sample(-2348.1627071584026), Sample(17360.269257396852)},
+		{Sample(-1177.6059328793112), Sample(19350.807275259638)},
+		{Sample(-351.8405852427604), Sample(20192.24393379015)}
 	}};
-	std::array<Sample, realCount> realCoeffs{{
-		Sample(-20.130941147991493),
-		Sample(10640.55702611266)
+	std::array<Sample, realCount> realPoles{{
+		Sample(-20.000000000000025),
+		Sample(-6298.035731484052)
+	}};
+	// Coeffs for direct bandlimited synthesis of a polynomial-segment waveform
+	std::array<std::complex<Sample>, complexCount> complexCoeffsDirect{{
+		{Sample(-20.13756830149893), Sample(-11.467013478535181)},
+		{Sample(-16453.812748230637), Sample(-7298.835752208561)},
+		{Sample(7771.069750908201), Sample(9555.31023870685)},
+		{Sample(-825.3820172192254), Sample(-6790.877301990311)},
+		{Sample(-1529.6770476201002), Sample(2560.1909145592135)},
+		{Sample(755.260843981231), Sample(-310.336256340709)}
+	}};
+	std::array<Sample, realCount> realCoeffsDirect{{
+		Sample(-20.138060433528526),
+		Sample(10325.52721970985)
+	}};
+	// Coeffs for cancelling the aliasing from discontinuities in an existing waveform
+	std::array<std::complex<Sample>, complexCount> complexCoeffsBlep{{
+		{Sample(-0.1375683014988951), Sample(0.0799919052573852)},
+		{Sample(-16453.812748230637), Sample(-7298.835752208561)},
+		{Sample(7771.069750908201), Sample(9555.31023870685)},
+		{Sample(-825.3820172192254), Sample(-6790.877301990311)},
+		{Sample(-1529.6770476201002), Sample(2560.1909145592135)},
+		{Sample(755.260843981231), Sample(-310.336256340709)}
+	}};
+	std::array<Sample, realCount> realCoeffsBlep{{
+		Sample(-0.13806043352856534),
+		Sample(10325.52721970985)
 	}};
 };
 
@@ -49,7 +63,9 @@ struct EllipticBlep {
 	using Coeffs = EllipticBlepCoeffs<Sample>;
 	static constexpr size_t maxBlepOrder = Coeffs::maxIntegrals;
 
-	EllipticBlep(Sample srate, size_t partialStepCount=128) : partialStepCount(partialStepCount) {
+	EllipticBlep(Sample srate, size_t partialStepCount=128) : EllipticBlep(true, srate, partialStepCount) {}
+
+	EllipticBlep(bool direct, Sample srate, size_t partialStepCount=128) : partialStepCount(partialStepCount) {
 		Coeffs sCoeffs; // S-plane (continuous time) filter
 		Sample hzToAngular = (2*M_PI)/srate;
 
@@ -74,11 +90,13 @@ struct EllipticBlep {
 			}
 		};
 		// For now, just cast real poles to complex ones
+		const auto &realCoeffs = (direct ? sCoeffs.realCoeffsDirect : sCoeffs.realCoeffsBlep);
 		for (size_t i = 0; i < Coeffs::realCount; ++i) {
-			addPole(i, sCoeffs.realPoles[i], sCoeffs.realCoeffs[i]);
+			addPole(i, sCoeffs.realPoles[i], realCoeffs[i]);
 		}
+		const auto &complexCoeffs = (direct ? sCoeffs.complexCoeffsDirect : sCoeffs.complexCoeffsBlep);
 		for (size_t i = 0; i < Coeffs::complexCount; ++i) {
-			addPole(i + Coeffs::realCount, sCoeffs.complexPoles[i], sCoeffs.complexCoeffs[i]);
+			addPole(i + Coeffs::realCount, sCoeffs.complexPoles[i], complexCoeffs[i]);
 		}
 		reset();
 	}
@@ -112,7 +130,6 @@ struct EllipticBlep {
 		size_t intIndex = std::floor(tableIndex);
 		Sample fracIndex = tableIndex - std::floor(tableIndex);
 
-		Array pulse;
 		// move the pulse along in time, the same way as state progresses in .step()
 		auto &lowPoles = partialStepPoles[intIndex];
 		auto &highPoles = partialStepPoles[intIndex + 1];
