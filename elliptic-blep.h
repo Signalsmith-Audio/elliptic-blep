@@ -63,9 +63,9 @@ struct EllipticBlep {
 	using Coeffs = EllipticBlepCoeffs<Sample>;
 	static constexpr size_t maxBlepOrder = Coeffs::maxIntegrals;
 
-	EllipticBlep(Sample srate, size_t partialStepCount=128) : EllipticBlep(true, srate, partialStepCount) {}
+	EllipticBlep(Sample srate=44100, size_t partialStepCount=127) : EllipticBlep(false, srate, partialStepCount) {}
 
-	EllipticBlep(bool direct, Sample srate, size_t partialStepCount=128) : partialStepCount(partialStepCount) {
+	EllipticBlep(bool direct, Sample srate, size_t partialStepCount=127) : partialStepCount(partialStepCount) {
 		Coeffs sCoeffs; // S-plane (continuous time) filter
 		Sample hzToAngular = (2*M_PI)/srate;
 
