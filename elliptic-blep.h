@@ -2,6 +2,7 @@
 #define SIGNALSMITH_ELLIPTIC_BLEP_H
 
 #include <array>
+#include <vector>
 #include <complex>
 
 #ifndef M_PI
@@ -72,7 +73,6 @@ struct EllipticBlep {
 		// Allocate the lookup table
 		partialStepPoles.resize(partialStepCount + 1);
 
-		blepCoeffs.resize(maxBlepOrder + 1);
 		auto addPole = [&](size_t index, Complex pole, Complex coeff){
 			coeffs[index] = coeff*hzToAngular;
 			
@@ -172,7 +172,7 @@ private:
 
 	using Array = std::array<Complex, count>;
 	Array coeffs, state;
-	std::vector<Array> blepCoeffs;
+	std::array<Array, maxBlepOrder + 1> blepCoeffs;
 	
 	// Lookup table for std::pow(pole, fractional)
 	size_t partialStepCount;
