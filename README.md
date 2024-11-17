@@ -23,7 +23,7 @@ signalsmith::blep::EllipticBlep<float> blep;
 
 The `blepOrder` argument of `.add()` specifies which type of discontinuity (where `0` is an impulse, `1` is a step discontinuity, `2` an instantaneous gradient change etc.), and `amount` specifies how much the corresponding differential changed by.  
 
-<img src="doc/step-add.png" width="29.9em" style="max-width: 100%">
+<img src="doc/step-add.png" width="478" style="max-width: 100%">
 
 ### Initialising: BLEP vs "direct" mode
 
@@ -65,6 +65,8 @@ private:
 	float phase = 0;
 };
 ```
+
+<img src="doc/saw-spectrogram.png" width="631" height="300" style="max-width: 100%">
 
 ## License
 
