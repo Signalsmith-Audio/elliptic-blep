@@ -9,9 +9,9 @@
 #include <vector>
 
 template<typename Sample>
-void plotBleps(std::string plotName, const int oversample=16, const double sampleRate=48000) {
+void plotBleps(std::string plotName, bool direct, const int oversample=16, const double sampleRate=48000) {
 	using Complex = std::complex<Sample>;
-	signalsmith::blep::EllipticBlep<Sample> blep(sampleRate);
+	signalsmith::blep::EllipticBlep<Sample> blep(direct, sampleRate);
 	
 	constexpr double impulseSeconds = 10;
 	size_t impulseLength = 1;
@@ -87,6 +87,8 @@ void plotBleps(std::string plotName, const int oversample=16, const double sampl
 }
 
 int main() {
-	plotBleps<double>("double");
-	plotBleps<float>("float");
+	plotBleps<double>("double-direct", true);
+	plotBleps<float>("float-direct", true);
+	plotBleps<double>("double-residue", false);
+	plotBleps<float>("float-residue", false);
 }
