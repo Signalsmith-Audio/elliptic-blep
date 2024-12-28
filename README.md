@@ -18,7 +18,7 @@ signalsmith::blep::EllipticBlep<float> blep;
 
 * `.get()`: sums the 1-pole states together to get the filter output at the current point in time.
 * `.step(samples=1)`: moves the filter state forward in time, by some (fractional) number of samples
-* `.add(amount, blepOrder, samplesInPast)`: adds in some event for which the aliasing should be canceled.
+* `.add(amount, blepOrder, samplesInPast=0)`: adds in some event for which the aliasing should be canceled.
 * `.reset()`
 
 The `blepOrder` argument of `.add()` specifies which type of discontinuity (where `0` is an impulse, `1` is a step discontinuity, `2` an instantaneous gradient change etc.), and `amount` specifies how much the corresponding differential changed by.  
@@ -30,6 +30,8 @@ The `blepOrder` argument of `.add()` specifies which type of discontinuity (wher
 The default mode is the classic BLEP pattern: you synthesise a waveform which will contain aliasing, and then add in an aliasing-cancellation signal.  In this mode, the sample-rate argument is optional, and is only needed if you want to have the exact same phase response (or cutoff) at different rates.
 
 If `direct` is enabled during initialisation, you don't have to synthesise the waveform yourself - it will be included in the filter's output.  However, this only works for purely polynomial-segment signals, and you *have* to inform the class of every discontinuity (including at the start of synthesis).  The sample-rate is not optional for this mode, because the output will be highpassed at 20Hz and that needs to be correctly placed.
+
+Impulses (`blepOrder=0`) always act as if in "direct" mode (i.e. not being added to a naive aliased signal).  The only difference is that in default BLEP mode the 20Hz highpass is omitted, so they remain phase-aligned with other BLEP orders.
 
 ## Example: sawtooth oscillator
 
