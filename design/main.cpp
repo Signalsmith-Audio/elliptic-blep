@@ -86,9 +86,79 @@ void plotBleps(std::string plotName, bool direct, const int oversample=16, const
 	spectrumFigure.write(plotName + "-spectrum.svg");
 }
 
+template<typename Sample>
+void plotPhase(std::string plotName) {
+	using Complex = std::complex<Sample>;
+	signalsmith::blep::EllipticBlep<Sample> blep;
+	signalsmith::blep::EllipticBlepAllpass<Sample> allpass;
+
+	size_t impulseLength = 16384;
+	std::vector<Complex> impulse(impulseLength);
+	std::vector<Complex> spectrum(impulseLength);
+	signalsmith::fft2::SimpleFFT<Sample> fft(impulseLength);
+
+	signalsmith::plot::Figure phaseFigure;
+	auto &phasePlot = phaseFigure(0, 0).plot(600, 120);
+	phasePlot.y.linear(-M_PI, M_PI).major(0).minor(-M_PI, u8"-π").minor(M_PI, u8"π").label("phase");
+	phasePlot.x.linear(0, 0.5).major(0).minor(20000/44100.0, "cutoff").minor(0.5, "Nyquist");
+	auto &phaseAmpPlot = phaseFigure(0, -1).plot(600, 80);
+	phaseAmpPlot.x.copyFrom(phasePlot.x).flip().blankLabels();
+	phaseAmpPlot.y.linear(-80, 3).major(0).minors(-20, -40, -60, -80).label("dB");
+	auto &groupDelayPlot = phaseFigure(0, 1).plot(600, 180);
+	groupDelayPlot.y.major(0).minor(2.5).minor(int(allpass.linearDelay)).label("delay (samples)");
+	groupDelayPlot.x.copyFrom(phasePlot.x);
+
+	phasePlot.legend(2, 1).add(0, "with allpass").add(1, "uncorrected");
+	phaseAmpPlot.legend(2, 1).add(0, "response").add(2, "difference from pure delay");
+	for (size_t skipAllpass = 0; skipAllpass < 2; ++skipAllpass) {
+		allpass.reset();
+		blep.add(1, 0);
+		for (size_t i = 0; i < impulseLength; ++i) {
+			Sample v = blep.get();
+			if (!skipAllpass) v = allpass(v);
+			impulse[i] = v;
+			blep.step();
+		}
+		
+		fft.fft(impulseLength, impulse.data(), spectrum.data());
+
+		auto *phaseLine = &phasePlot.line();
+		auto &ampLine = phaseAmpPlot.line(skipAllpass ? 0 : 2);
+		auto &delayLine = groupDelayPlot.line();
+		Sample prevPhase = 0, prevFreq = -1;
+		for (size_t i = 0; i <= impulseLength/2; ++i) {
+			Sample freqNorm = Sample(i)/impulseLength;
+			
+			Sample phase = std::arg(spectrum[i]);
+			if (std::abs(phase - prevPhase) > 6) {
+				// Jump, by starting a new line
+				phaseLine = &phasePlot.line(phaseLine->styleIndex);
+			} else {
+				Complex v = spectrum[i];
+				if (!skipAllpass) {
+					Complex expected = std::polar(Sample(1), Sample(-2*M_PI*freqNorm*allpass.linearDelay));
+					v -= expected;
+				}
+				Sample db = 10*std::log10(std::norm(v) + 1e-30);
+			
+				phaseLine->add(freqNorm, phase);
+				Sample groupDelay = (prevPhase - phase)/(freqNorm - prevFreq)/Sample(2*M_PI);
+				delayLine.add(freqNorm, groupDelay);
+				ampLine.add(freqNorm, db);
+			}
+			
+			prevPhase = phase;
+			prevFreq = freqNorm;
+		}
+	}
+
+	phaseFigure.write(plotName + ".svg");
+}
+
 int main() {
 	plotBleps<double>("double-direct", true);
 	plotBleps<float>("float-direct", true);
 	plotBleps<double>("double-residue", false);
 	plotBleps<float>("float-residue", false);
+	plotPhase<double>("double-phase");
 }

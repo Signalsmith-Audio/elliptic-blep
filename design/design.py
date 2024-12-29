@@ -6,13 +6,17 @@ import numpy
 import scipy
 import scipy.signal
 import scipy.optimize
+import sys
 
 filter_order = 11
 filter_ripple_db = 0.1
 filter_stop_db = 97.5
 lowpass_freq = 20000
 highpass_freq = 20
+ref_srate = 44100
 blep_order = 3
+
+print("\nDesigning BLEP filters", file=sys.stderr)
 
 #------- Create the highpass filter
 
@@ -74,8 +78,87 @@ for i in range(len(impulse_poles)):
 real_coeffs_impulse = impulse_coeffs_padded[real_indices]*1
 complex_coeffs_impulse = impulse_coeffs_padded[complex_indices]*2 # doubled since we're only using one and taking the real part
 
-# Write the results out as a C++ class
-print("""template<typename Sample>
+print("\tdone")
+
+#------- Horrible brute-force search for a phase-compensation allpass
+
+max_allpass_order = filter_order
+max_delay_samples = max_allpass_order*2
+allpass_design_density = 1024
+allpass_design_peak_sensitivity = 1; # 1 = average error amplitude, 2 = average error energy, Inf = peak
+
+def find_allpass_coeffs(opt_freq_density, max_allpass_order, max_delay_samples, error_metric=1):
+	opt_freqs = numpy.linspace(0, numpy.pi, opt_freq_density)
+	
+	# Convert to digital filter using impulse-invariance (same as the C++ code will)
+	hz_to_angular = 2*numpy.pi/ref_srate
+	discrete_poles = numpy.exp(impulse_poles*hz_to_angular);
+	discrete_coeffs = impulse_coeffs*hz_to_angular
+	discrete_b, discrete_a = scipy.signal.invresz(discrete_coeffs, discrete_poles, [])
+	discrete_z, discrete_p, discrete_k = scipy.signal.tf2zpk(discrete_b, discrete_a)
+
+	def delay_allpass_coeffs(poles):
+		(_, allpass_a) = scipy.signal.zpk2tf([], poles, 1)
+		return allpass_a;
+		
+	def opt_allpass_response(poles):
+		# Add the allpass poles/zeroes to the impulse filter
+		combined_p = numpy.append(discrete_p, poles)
+		combined_z = numpy.append(discrete_z, 1/poles);
+		combined_k = discrete_k*abs(numpy.prod(poles))
+		_, response = scipy.signal.freqz_zpk(combined_z, combined_p, combined_k, worN=opt_freqs);
+		return response;
+
+	# Decode real-valued optimisation coefficients into complex/real pole positions
+	def opt_ri_to_poles(poles_ri):
+		poles = []
+		# conjugate pairs
+		for i in range(0, len(poles_ri) - 1, 2):
+			poles.append(poles_ri[i] + 1j*poles_ri[i + 1])
+			poles.append(poles_ri[i] - 1j*poles_ri[i + 1])
+		if len(poles_ri)%2 == 1:
+			poles.append(poles_ri[-1])
+		return numpy.array(poles)
+
+	def opt_allpass_score(poles_ri, opt_ref_response):
+		poles = opt_ri_to_poles(poles_ri)
+		for pole in poles:
+			if abs(pole) > 0.99: # inaccurate or unstable
+				return 1e100
+
+		response = opt_allpass_response(poles)
+		diff = opt_ref_response - response
+		
+		score = sum(abs(diff)**error_metric) # 1 = error amplitude, 2 = energy, etc.
+		return score
+
+	best = None
+	best_samples = 0
+	_, impulse_response = scipy.signal.freqz_zpk(discrete_z, discrete_p, discrete_k, worN=opt_freqs)
+	amp_response = numpy.abs(impulse_response);
+	for allpass_order in range(1, max_allpass_order + 1):
+		print("\tAllpass order: %i"%allpass_order, file=sys.stderr)
+		for samples in range(1, max_delay_samples + 1):
+			linear_response = numpy.exp(-1j*samples*opt_freqs)
+			linear_response *= amp_response
+			opt_start = numpy.zeros(allpass_order) + 0.1
+			opt_result = scipy.optimize.minimize(opt_allpass_score, opt_start, args=(linear_response,), method='Nelder-Mead')
+			if best == None or opt_result.fun < best.fun:
+				best = opt_result
+				best_samples = samples
+				poles = opt_ri_to_poles(best.x)
+				average_error = (opt_result.fun/len(opt_freqs))**(1/error_metric);
+				print("\t\t%i-sample delay -> %f"%(samples, average_error), file=sys.stderr)
+	opt_allpass_poles = opt_ri_to_poles(best.x)
+	return best_samples, delay_allpass_coeffs(opt_allpass_poles)
+
+print("\nFinding phase-compensation allpass", file=sys.stderr)
+linear_delay, linear_coeffs = find_allpass_coeffs(allpass_design_density, max_allpass_order, max_delay_samples, allpass_design_peak_sensitivity)
+
+#------- Generate C++
+print("\nWriting C++ code: out/coeffs.h")
+
+cppCode = """template<typename Sample>
 struct EllipticBlepCoeffs {
 	static constexpr size_t maxIntegrals = %i;
 	static constexpr size_t complexCount = %i;
@@ -107,6 +190,12 @@ struct EllipticBlepCoeffs {
 	std::array<Sample, realCount> realCoeffsImpulse{{
 		%s
 	}};
+	// Allpass to make the phase approximately linear
+	static constexpr int allpassLinearDelay = %i;
+	static constexpr int allpassOrder = %i;
+	std::array<Sample, allpassOrder> allpassCoeffs{{
+		%s
+	}};
 };"""%(
 	blep_order,
 	len(complex_poles),
@@ -118,5 +207,10 @@ struct EllipticBlepCoeffs {
 	",\n\t\t".join(["{Sample(%s), Sample(%s)}"%(p.real.astype(str), p.imag.astype(str)) for p in complex_coeffs_blep]),
 	",\n\t\t".join(["Sample(%s)"%(p.real.astype(str)) for p in real_coeffs_blep]),
 	",\n\t\t".join(["{Sample(%s), Sample(%s)}"%(p.real.astype(str), p.imag.astype(str)) for p in complex_coeffs_impulse]),
-	",\n\t\t".join(["Sample(%s)"%(p.real.astype(str)) for p in real_coeffs_impulse])
-))
+	",\n\t\t".join(["Sample(%s)"%(p.real.astype(str)) for p in real_coeffs_impulse]),
+	linear_delay,
+	len(linear_coeffs - 1),
+	",\n\t\t".join(["Sample(%s)"%(p.real.astype(str)) for p in linear_coeffs[1:]]),
+)
+with open("out/coeffs.h", 'w') as file:
+	file.write(cppCode)

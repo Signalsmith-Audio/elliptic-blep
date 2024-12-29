@@ -17,7 +17,7 @@ template<typename Sample>
 struct EllipticBlepCoeffs {
 	static constexpr size_t maxIntegrals = 3;
 	static constexpr size_t complexCount = 6;
-	static constexpr int realCount = 2;
+	static constexpr size_t realCount = 2;
 	std::array<std::complex<Sample>, complexCount> complexPoles{{
 		{Sample(-10.000000000000018), Sample(17.32050807568877)},
 		{Sample(-5561.9825585455355), Sample(7721.564144482811)},
@@ -68,6 +68,19 @@ struct EllipticBlepCoeffs {
 	std::array<Sample, realCount> realCoeffsImpulse{{
 		Sample(-0.0),
 		Sample(10260.028875848622)
+	}};
+	// Allpass to make the phase approximately linear
+	static constexpr size_t allpassLinearDelay = 13;
+	static constexpr size_t allpassOrder = 9;
+	std::array<Sample, allpassOrder> allpassCoeffs{{
+		Sample(-1.1404019925774542),
+		Sample(0.8717712692843811),
+		Sample(-0.5414291107410761),
+		Sample(0.28401669500648064),
+		Sample(-0.12366157348276685),
+		Sample(0.044047609267247115),
+		Sample(-0.011062973561742056),
+		Sample(0.0016011395326086875)
 	}};
 };
 
@@ -191,6 +204,34 @@ private:
 	// Lookup table for std::pow(pole, fractional)
 	size_t partialStepCount;
 	std::vector<Array> partialStepPoles;
+};
+
+// Allpass which makes the Elliptic BLEP filter approximately linear-phase
+template<typename Sample>
+struct EllipticBlepAllpass {
+	using Coeffs = EllipticBlepCoeffs<Sample>;
+	static constexpr size_t linearDelay = Coeffs::allpassLinearDelay;
+	static constexpr size_t order = Coeffs::allpassOrder;
+
+	EllipticBlepAllpass() : coeffs(Coeffs().allpassCoeffs) {}
+
+	void reset() {
+		for (auto &s : state) s = 0;
+	}
+	
+	Sample operator()(Sample x0) {
+		Sample y = state[0] + x0*coeffs[order - 1];
+		for (size_t i = 0; i < order - 1; ++i) {
+			Sample coeffA = coeffs[i];
+			Sample coeffB = coeffs[order - 2 - i];
+			state[i] = state[i + 1] + x0*coeffB - y*coeffA;
+		}
+		state[order - 1] = x0 - y*coeffs[order - 1];
+		return y;
+	}
+private:
+	std::array<Sample, Coeffs::allpassOrder> coeffs;
+	std::array<Sample, Coeffs::allpassOrder> state;
 };
 
 }} // namespace

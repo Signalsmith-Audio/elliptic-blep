@@ -3,7 +3,7 @@ main: out/main
 
 out/coeffs.h: design.py
 	mkdir -p out
-	python3 design.py | tee out/coeffs.h
+	python3 design.py
 	
 out/main: out/coeffs.h *.cpp ../*.h
 	g++ -std=c++11 -Ofast \
