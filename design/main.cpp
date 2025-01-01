@@ -23,7 +23,7 @@ void plotBleps(std::string plotName, bool direct, const int oversample=16, const
 	signalsmith::plot::Figure impulseFigure, spectrumFigure;
 	auto &impulsePlot = impulseFigure(0, 0).plot(600*plotScaleX, 120*plotScaleY);
 	impulsePlot.x.major(0).linear(0, 0.001).minor(0.001, "1ms").label("time");
-	impulsePlot.y.major(0).label(direct ? "direct response" : "default response");
+	impulsePlot.y.major(0).label(direct ? "direct response" : "BLEP residue");
 	if (direct) {
 		impulsePlot.y.minor(1, " 1").linear(-0.5, 1.5);
 	} else {
@@ -135,17 +135,16 @@ void plotPhase(std::string plotName) {
 			impulse[i] = v;
 			if (i < allpass.linearDelay*3) {
 				for (int o = 0; o < oversampleFactor; ++o) {
-					Sample t = i + double(o)/oversampleFactor, v = blep.get();
+					Sample dt = double(o)/oversampleFactor;
+					Sample v = blep.get(dt);
 					if (skipAllpass && std::abs(v) > maxTimeAmp) {
 						maxTimeAmp = std::abs(v);
-						maxTime = t;
+						maxTime = i + dt;
 					}
-					impulseLine.add(t, v);
-					blep.step(1.0/oversampleFactor);
+					impulseLine.add(i + dt, v);
 				}
-			} else {
-				blep.step();
 			}
+			blep.step();
 		}
 		maxTime = std::round(maxTime*100)*0.01;
 		impulsePlot.x.minor(maxTime);

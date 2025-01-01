@@ -133,7 +133,8 @@ struct EllipticBlep {
 	void reset() {
 		for (auto &s : state) s = 0;
 	}
-
+	
+	/// Instantaneous filter output
 	Sample get() const {
 		Sample sum = 0;
 		for (size_t i = 0; i < count; ++i) {
@@ -141,7 +142,24 @@ struct EllipticBlep {
 		}
 		return sum;
 	}
-	
+
+	/// Future (≤ 1 sample) filter output (as if we called `.step(samplesInFuture)` before `.get()`)
+	Sample get(Sample samplesInFuture) const {
+		Sample tableIndex = samplesInFuture*partialStepCount;
+		size_t intIndex = std::floor(tableIndex);
+		Sample fracIndex = tableIndex - std::floor(tableIndex);
+
+		auto &lowPoles = partialStepPoles[intIndex];
+		auto &highPoles = partialStepPoles[intIndex + 1];
+
+		Sample sum = 0;
+		for (size_t i = 0; i < count; ++i) {
+			Complex lerpPole = lowPoles[i] + (highPoles[i] - lowPoles[i])*fracIndex;
+			sum += (state[i]*lerpPole).real();
+		}
+		return sum;
+	}
+
 	void add(Sample amount, size_t blepOrder) {
 		if (blepOrder > maxBlepOrder) return;
 		auto &bc = blepCoeffs[blepOrder];
@@ -179,6 +197,7 @@ struct EllipticBlep {
 		Sample tableIndex = samples*partialStepCount;
 		size_t intIndex = std::floor(tableIndex);
 		Sample fracIndex = tableIndex - std::floor(tableIndex);
+		// We can step forward by > 1 sample
 		while (intIndex >= partialStepCount) {
 			step();
 			intIndex -= partialStepCount;
