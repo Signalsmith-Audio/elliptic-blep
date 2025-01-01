@@ -23,7 +23,7 @@ void plotBleps(std::string plotName, bool direct, const int oversample=16, const
 	signalsmith::plot::Figure impulseFigure, spectrumFigure;
 	auto &impulsePlot = impulseFigure(0, 0).plot(600*plotScaleX, 120*plotScaleY);
 	impulsePlot.x.major(0).linear(0, 0.001).minor(0.001, "1ms").label("time");
-	impulsePlot.y.major(0).label("response (48kHz)");
+	impulsePlot.y.major(0).label(direct ? "direct response" : "default response");
 	if (direct) {
 		impulsePlot.y.minor(1, " 1").linear(-0.5, 1.5);
 	} else {

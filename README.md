@@ -16,6 +16,8 @@ signalsmith::blep::EllipticBlep<float> blep;
 
 ### Methods
 
+The `EllipticBlep` class has these methods:
+
 * `.get()`: sums the 1-pole states together to get the filter output at the current point in time.
 * `.step(samples=1)`: moves the filter state forward in time, by some (fractional) number of samples
 * `.add(amount, blepOrder, samplesInPast=0)`: adds in some event for which the aliasing should be canceled.
@@ -25,15 +27,46 @@ The `blepOrder` argument of `.add()` specifies which type of discontinuity (wher
 
 <img src="doc/step-add.png" width="478" style="max-width: 100%">
 
-### Initialising: BLEP vs "direct" mode
+### Default BLEP vs "direct" mode
 
-The default mode is the classic BLEP pattern: you synthesise a waveform which will contain aliasing, and then add in an aliasing-cancellation signal.  In this mode, the sample-rate argument is optional, and is only needed if you want to have the exact same phase response (or cutoff) at different rates.
+The default mode is the classic BLEP pattern: you synthesise a waveform which will contain aliasing, and then add in an aliasing-cancellation signal.
 
-If `direct` is enabled during initialisation, you don't have to synthesise the waveform yourself - it will be included in the filter's output.  However, this only works for purely polynomial-segment signals, and you *have* to inform the class of every discontinuity (including at the start of synthesis).  The sample-rate is not optional for this mode, because the output will be highpassed at 20Hz and that needs to be correctly placed.
+![impulse response for default BLEP mode](doc/double-residue-impulse-top.svg)
 
-### Impulses
+In this mode, the sample-rate argument is optional, and is only needed if you want to have the exact same phase response (or cutoff) at different rates.
 
-Impulses (`blepOrder=0`) always act as if in "direct" mode (i.e. not being added to a naive aliased signal).  The only difference is that "direct" mode includes the 20Hz highpass, but the default BLEP mode doesn't (so both modes remain phase-aligned with other BLEP orders).
+#### Direct mode
+
+If `direct` is enabled during initialisation, you don't have to synthesise the waveform yourself - the step/ramp/etc. will be included in the filter's output:
+
+![impulse response for direct mode](doc/double-direct-impulse-top.svg)
+
+However, this only works for purely polynomial-segment signals, and you *have* to inform the class of every discontinuity (including at the start of synthesis).  The sample-rate is not optional for this mode, because the output will be highpassed at 20Hz and that needs to be correctly placed.
+
+#### Impulses
+
+You can add impulses (using `blepOrder=0`).  Even in default BLEP mode, there is no "naive" signal equivalent for these, so they are always used directly (although default BLEP mode doesn't include the 20Hz highpass).
+
+### Phase compensation
+
+There is an `EllipticBlepAllpass` template as well, which adds phase-shifts to make the BLEP filter approximately linear-phase.
+
+```cpp
+EllipticBlep<float> blep;
+EllipticBlepAllpass<float> blepAllpass;
+
+// using the BLEP in default mode (adding BLEP residue to a naive signal)
+float minPhaseY = aliasedY + blep.get();
+// pass samples through the filters
+float approxLinearY = blepAllpass(minPhaseY);
+
+// It's best to use this constant, in case the filter gets redesigned later
+size_t linearLatency = EllipticBlepAllpass<float>::linearDelay;
+```
+
+This needs to match the cutoff of the BLEP filter, so should **only** be used in default BLEP mode, with no sample-rate specified.
+
+![diagram of the min-phase and approximately-linear-phase impulse and phase responses](doc/double-phase.svg)
 
 ## Example: sawtooth oscillator
 
@@ -44,14 +77,12 @@ struct SawtoothOscillator {
 	
 	void reset() {
 		blep.reset();
+		allpass.reset();
 		phase = 0;
 	}
 	
 	// next output sample
 	float operator()() {
-		float result = (2*phase - 1);
-		result += blep.get();
-	
 		phase += freq;
 		blep.step();
 		while (phase >= 1) {
@@ -60,12 +91,17 @@ struct SawtoothOscillator {
 			// -2 change, order-1 (step) discontinuity
 			blep.add(-2, 1, samplesInPast);
 		}
-		
+
+		float result = (2*phase - 1); // naive sawtooth
+		result += blep.get(); // add in BLEP residue
+
+		result = allpass(result); // (optional) phase correction
 		return result*amp;
 	}
 
 private:
 	signalsmith::blep::EllipticBlep<float> blep;
+	signalsmith::blep::EllipticBlepAllpass<float> allpass;
 	float phase = 0;
 };
 ```
