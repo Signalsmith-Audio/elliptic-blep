@@ -31,7 +31,9 @@ The default mode is the classic BLEP pattern: you synthesise a waveform which wi
 
 If `direct` is enabled during initialisation, you don't have to synthesise the waveform yourself - it will be included in the filter's output.  However, this only works for purely polynomial-segment signals, and you *have* to inform the class of every discontinuity (including at the start of synthesis).  The sample-rate is not optional for this mode, because the output will be highpassed at 20Hz and that needs to be correctly placed.
 
-Impulses (`blepOrder=0`) always act as if in "direct" mode (i.e. not being added to a naive aliased signal).  The only difference is that in default BLEP mode the 20Hz highpass is omitted, so they remain phase-aligned with other BLEP orders.
+### Impulses
+
+Impulses (`blepOrder=0`) always act as if in "direct" mode (i.e. not being added to a naive aliased signal).  The only difference is that "direct" mode includes the 20Hz highpass, but the default BLEP mode doesn't (so both modes remain phase-aligned with other BLEP orders).
 
 ## Example: sawtooth oscillator
 

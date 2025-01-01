@@ -8,6 +8,8 @@
 
 #include <vector>
 
+static constexpr double plotScaleX = 0.8, plotScaleY = 1;
+
 template<typename Sample>
 void plotBleps(std::string plotName, bool direct, const int oversample=16, const double sampleRate=48000) {
 	using Complex = std::complex<Sample>;
@@ -19,27 +21,32 @@ void plotBleps(std::string plotName, bool direct, const int oversample=16, const
 	std::vector<Complex> impulse(impulseLength);
 
 	signalsmith::plot::Figure impulseFigure, spectrumFigure;
-	auto &impulsePlot = impulseFigure(0, 0).plot(600, 150);
+	auto &impulsePlot = impulseFigure(0, 0).plot(600*plotScaleX, 120*plotScaleY);
 	impulsePlot.x.major(0).linear(0, 0.001).minor(0.001, "1ms").label("time");
-	impulsePlot.y.major(0).minor(1, " 1").linear(-0.5, 1.5).label("response (48kHz)");
-	auto &impulsePlot2 = impulseFigure(0, 1).plot(600, 250);
+	impulsePlot.y.major(0).label("response (48kHz)");
+	if (direct) {
+		impulsePlot.y.minor(1, " 1").linear(-0.5, 1.5);
+	} else {
+		impulsePlot.y.minor(-1, "-1").linear(-1.2, 0.8);
+	}
+	auto &impulsePlot2 = impulseFigure(0, 1).plot(600*plotScaleX, 120*plotScaleY);
 	impulsePlot2.x.major(0).linear(0, 0.2).minor(0.1, "100ms").minor(0.2, "200ms");
 	impulsePlot2.y.major(0).minor(100).minor(-100).linear(-150, 150);
-	auto &spectrumPlot = spectrumFigure(0, 1).plot(600, 250);
+	auto &spectrumPlot = spectrumFigure(0, 1).plot(600*plotScaleX, 250*plotScaleY);
 	spectrumPlot.x.major(0).minor(20000, "20kHz").minor(24000, "24kHz").linear(0, 26000);
 	spectrumPlot.y.major(0).minors(-30, -60, -90).label("dB").linear(-105, 5);
-	auto &spectrumPlotZoom = spectrumFigure(0, 2).plot(600, 80);
+	auto &spectrumPlotZoom = spectrumFigure(0, 2).plot(600*plotScaleX, 80*plotScaleY);
 	spectrumPlotZoom.x.copyFrom(spectrumPlot.x);
 	spectrumPlotZoom.y.major(0).minors(-0.1).label("ripple").linear(-0.2, 0.1);
-	auto &spectrumPlotZoom2 = spectrumFigure(0, 3).plot(600, 80);
+	auto &spectrumPlotZoom2 = spectrumFigure(0, 3).plot(600*plotScaleX, 80*plotScaleY);
 	spectrumPlotZoom2.x.linear(0, 100).major(0).minors(20, 40, 60, 80).label("Hz");
 	spectrumPlotZoom2.y.linear(-6, 0).major(0).minors(-3, -6).label("highpass");
 
 	std::vector<Complex> spectrum(impulseLength);
 	signalsmith::fft2::SimpleFFT<Sample> fft(impulseLength);
 	
-	auto &legend = impulsePlot.legend(2, 1);
-	auto &legend2 = spectrumPlot.legend(2, 1);
+	auto &legend = impulsePlot.legend(1, 1);
+	auto &legend2 = spectrumPlot.legend(0.05, 0);
 	std::vector<const char *> labels = {"impulse", "1st-order BLEP", "2nd-order BLEP (BLAMP)", "3rd-order BLEP"};
 
 	for (size_t o = 0; o <= blep.maxBlepOrder; ++o) {
@@ -97,28 +104,52 @@ void plotPhase(std::string plotName) {
 	std::vector<Complex> spectrum(impulseLength);
 	signalsmith::fft2::SimpleFFT<Sample> fft(impulseLength);
 
-	signalsmith::plot::Figure phaseFigure;
-	auto &phasePlot = phaseFigure(0, 0).plot(600, 120);
+	signalsmith::plot::Figure phaseFigure, timeFigure;
+	auto &phasePlot = timeFigure(0, 1).plot(600*plotScaleX, 80*plotScaleY);
 	phasePlot.y.linear(-M_PI, M_PI).major(0).minor(-M_PI, u8"-π").minor(M_PI, u8"π").label("phase");
 	phasePlot.x.linear(0, 0.5).major(0).minor(20000/44100.0, "cutoff").minor(0.5, "Nyquist");
-	auto &phaseAmpPlot = phaseFigure(0, -1).plot(600, 80);
+	auto &phaseAmpPlot = phaseFigure(0, -1).plot(600*plotScaleX, 120*plotScaleY);
 	phaseAmpPlot.x.copyFrom(phasePlot.x).flip().blankLabels();
 	phaseAmpPlot.y.linear(-80, 3).major(0).minors(-20, -40, -60, -80).label("dB");
-	auto &groupDelayPlot = phaseFigure(0, 1).plot(600, 180);
-	groupDelayPlot.y.major(0).minor(2.5).minor(int(allpass.linearDelay)).label("delay (samples)");
+	auto &groupDelayPlot = timeFigure(0, 2).plot(600*plotScaleX, 150*plotScaleY);
+	groupDelayPlot.y.major(0).minor(int(allpass.linearDelay)).label("delay (samples)");
 	groupDelayPlot.x.copyFrom(phasePlot.x);
+	auto &impulsePlot = timeFigure(0, 0).plot(600*plotScaleX, 80*plotScaleY);
+	impulsePlot.y.major(0).minor(1).label("impulse");
+	impulsePlot.x.major(0).minor(int(allpass.linearDelay)).label("samples");
+	impulsePlot.legend(1, 1).line(0, "with allpass").add(1, "uncorrected");
 
-	phasePlot.legend(2, 1).add(0, "with allpass").add(1, "uncorrected");
-	phaseAmpPlot.legend(2, 1).add(0, "response").add(2, "difference from pure delay");
+	phaseAmpPlot.legend(1, 0).add(0, "response").add(2, "difference from pure delay");
+	double maxTime = 0, maxTimeAmp = 0;
 	for (size_t skipAllpass = 0; skipAllpass < 2; ++skipAllpass) {
+		auto &impulseLine = impulsePlot.line();
+
 		allpass.reset();
-		blep.add(1, 0);
+		int oversampleFactor = 16;
 		for (size_t i = 0; i < impulseLength; ++i) {
+			Sample x = (i == 0);
+			if (!skipAllpass) x = allpass(x);
+			blep.add(x, 0);
+
 			Sample v = blep.get();
-			if (!skipAllpass) v = allpass(v);
 			impulse[i] = v;
-			blep.step();
+			if (i < allpass.linearDelay*3) {
+				for (int o = 0; o < oversampleFactor; ++o) {
+					Sample t = i + double(o)/oversampleFactor, v = blep.get();
+					if (skipAllpass && std::abs(v) > maxTimeAmp) {
+						maxTimeAmp = std::abs(v);
+						maxTime = t;
+					}
+					impulseLine.add(t, v);
+					blep.step(1.0/oversampleFactor);
+				}
+			} else {
+				blep.step();
+			}
 		}
+		maxTime = std::round(maxTime*100)*0.01;
+		impulsePlot.x.minor(maxTime);
+		groupDelayPlot.y.minor(maxTime);
 		
 		fft.fft(impulseLength, impulse.data(), spectrum.data());
 
@@ -143,7 +174,7 @@ void plotPhase(std::string plotName) {
 			
 				phaseLine->add(freqNorm, phase);
 				Sample groupDelay = (prevPhase - phase)/(freqNorm - prevFreq)/Sample(2*M_PI);
-				delayLine.add(freqNorm, groupDelay);
+				if (i > 0) delayLine.add(freqNorm, groupDelay);
 				ampLine.add(freqNorm, db);
 			}
 			
@@ -152,7 +183,8 @@ void plotPhase(std::string plotName) {
 		}
 	}
 
-	phaseFigure.write(plotName + ".svg");
+	timeFigure.write(plotName + ".svg");
+	phaseFigure.write(plotName + "-error.svg");
 }
 
 int main() {
