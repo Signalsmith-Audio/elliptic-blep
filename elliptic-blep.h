@@ -232,10 +232,12 @@ struct EllipticBlepAllpass {
 	static constexpr size_t linearDelay = Coeffs::allpassLinearDelay;
 	static constexpr size_t order = Coeffs::allpassOrder;
 
-	EllipticBlepAllpass() : coeffs(Coeffs().allpassCoeffs) {}
+	EllipticBlepAllpass() : coeffs(Coeffs().allpassCoeffs) {
+		reset();
+	}
 
 	void reset() {
-		for (auto &s : state) s = 0;
+		state.fill(0);
 	}
 	
 	Sample operator()(Sample x0) {
