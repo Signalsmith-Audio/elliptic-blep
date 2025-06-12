@@ -70,8 +70,8 @@ struct EllipticBlepCoeffs {
 		Sample(10260.028875848622)
 	}};
 	// Allpass to make the phase approximately linear
-	static constexpr size_t allpassLinearDelay = 13;
-	static constexpr size_t allpassOrder = 9;
+	static constexpr size_t allpassLinearDelay = 12;
+	static constexpr size_t allpassOrder = 8;
 	std::array<Sample, allpassOrder> allpassCoeffs{{
 		Sample(-1.1404019925774542),
 		Sample(0.8717712692843811),

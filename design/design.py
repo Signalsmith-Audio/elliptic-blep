@@ -145,7 +145,7 @@ def find_allpass_coeffs(opt_freq_density, max_allpass_order, max_delay_samples, 
 			opt_result = scipy.optimize.minimize(opt_allpass_score, opt_start, args=(linear_response,), method='Nelder-Mead')
 			if best == None or opt_result.fun < best.fun:
 				best = opt_result
-				best_samples = samples
+				best_samples = samples - 1
 				poles = opt_ri_to_poles(best.x)
 				average_error = (opt_result.fun/len(opt_freqs))**(1/error_metric);
 				print("\t\t%i-sample delay -> %f"%(samples, average_error), file=sys.stderr)
@@ -209,7 +209,7 @@ struct EllipticBlepCoeffs {
 	",\n\t\t".join(["{Sample(%s), Sample(%s)}"%(p.real.astype(str), p.imag.astype(str)) for p in complex_coeffs_impulse]),
 	",\n\t\t".join(["Sample(%s)"%(p.real.astype(str)) for p in real_coeffs_impulse]),
 	linear_delay,
-	len(linear_coeffs - 1),
+	len(linear_coeffs) - 1,
 	",\n\t\t".join(["Sample(%s)"%(p.real.astype(str)) for p in linear_coeffs[1:]]),
 )
 with open("out/coeffs.h", 'w') as file:
